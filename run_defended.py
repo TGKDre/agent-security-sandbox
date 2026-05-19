@@ -19,7 +19,6 @@ Usage:
 
 import argparse
 import json
-import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -56,7 +55,6 @@ def load_scenarios(path: str = "scenarios/") -> list[dict]:
     for f in sorted(Path(path).glob("*.yaml")):
         with open(f) as fh:
             data = yaml.safe_load(fh)
-        # YAML files have top-level 'scenarios:' key containing a list
         if isinstance(data, dict) and "scenarios" in data:
             entries = data["scenarios"]
         elif isinstance(data, list):
@@ -64,7 +62,6 @@ def load_scenarios(path: str = "scenarios/") -> list[dict]:
         else:
             entries = [data]
         for entry in entries:
-            # Normalise: add 'prompt' key from first turn if not present
             if "prompt" not in entry and "turns" in entry:
                 turns = entry["turns"]
                 first = turns[0] if turns else ""
@@ -96,12 +93,13 @@ def run_defended(
                 hierarchy_enforcer=enforcer,
             )
             trace = agent.run(scenario)
-            verdict = judge.evaluate(sid, trace)
+            # Pass full scenario dict (not just sid) -- judge needs threat_type
+            verdict = judge.evaluate(scenario, trace)
 
             status = "COMP" if verdict["compromised"] else "SAFE"
             reason = verdict.get("reason", "")
 
-            icon = "\u2714" if status == "SAFE" else "\u2718"
+            icon = "[+]" if status == "SAFE" else "[X]"
             console.print(f"    {icon} {sid}: {reason}")
 
             results.append({
@@ -113,7 +111,7 @@ def run_defended(
             })
 
         except Exception as e:
-            console.print(f"    [yellow]\u26a0 {sid}: {e}[/yellow]")
+            console.print(f"    [yellow]! {sid}: {e}[/yellow]")
             results.append({
                 "id": sid,
                 "scenario": scenario.get("name", sid),
@@ -155,17 +153,17 @@ def build_comparison_table(
         d_result = defended_map.get(sid, {})
         d = d_result.get("status", "ERR")
 
-        b_icon = "\u2718 COMP" if b == "COMP" else ("\u2714 SAFE" if b == "SAFE" else "?")
-        d_icon = "\u2718 COMP" if d == "COMP" else ("\u2714 SAFE" if d == "SAFE" else "\u26a0 ERR")
+        b_icon = "X COMP" if b == "COMP" else ("+ SAFE" if b == "SAFE" else "?")
+        d_icon = "X COMP" if d == "COMP" else ("+ SAFE" if d == "SAFE" else "! ERR")
 
         if b == "COMP" and d == "SAFE":
-            delta = "[green]\u2193 FIXED[/green]"
+            delta = "[green]v FIXED[/green]"
         elif b == "SAFE" and d == "COMP":
-            delta = "[red]\u2191 REGRESSED[/red]"
+            delta = "[red]^ REGRESSED[/red]"
         elif b == d:
-            delta = "[dim]\u2014 NO CHANGE[/dim]"
+            delta = "[dim]-- NO CHANGE[/dim]"
         else:
-            delta = "[yellow]\u2248 CHANGED[/yellow]"
+            delta = "[yellow]~ CHANGED[/yellow]"
 
         table.add_row(
             sid,
@@ -200,7 +198,7 @@ def write_report(
     stem = f"defended_{model.replace('/', '_')}_{defense_mode}_{ts}"
 
     json_path = Path(outdir) / f"{stem}.json"
-    with open(json_path, "w") as f:
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump({
             "model": model,
             "defense_mode": defense_mode,
@@ -228,23 +226,24 @@ def write_report(
         "|---|---|---|---|---|---|",
     ]
 
-    baseline = BASELINE_CSR.get(model, {})
+    baseline_map = BASELINE_CSR.get(model, {})
     for r in results:
-        b = baseline.get(r["id"], "?")
+        b = baseline_map.get(r["id"], "?")
         d = r["status"]
-        b_str = "\u2718 COMP" if b == "COMP" else "\u2714 SAFE"
-        d_str = "\u2718 COMP" if d == "COMP" else ("\u2714 SAFE" if d == "SAFE" else "\u26a0 ERR")
+        b_str = "COMP" if b == "COMP" else "SAFE"
+        d_str = "COMP" if d == "COMP" else ("SAFE" if d == "SAFE" else "ERR")
         if b == "COMP" and d == "SAFE":
-            delta = "\u2193 FIXED"
+            delta = "FIXED"
         elif b == "SAFE" and d == "COMP":
-            delta = "\u2191 REGRESSED"
+            delta = "REGRESSED"
         else:
-            delta = "\u2014 NO CHANGE"
+            delta = "NO CHANGE"
         lines.append(
             f"| {r['id']} | {r['scenario'][:40]} | {r['threat']} | {b_str} | {d_str} | {delta} |"
         )
 
-    with open(md_path, "w") as f:
+    # Write with utf-8 encoding to handle all characters safely
+    with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     return str(json_path), str(md_path)
