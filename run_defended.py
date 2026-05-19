@@ -5,8 +5,8 @@ Runs the full scenario suite with defenses active and produces a before/after
 CSR comparison against the undefended baseline.
 
 Defenses applied:
-  1. ToolOutputSanitizer  — strips injection signals and redacts secrets in tool output
-  2. HierarchyEnforcer    — prepends explicit trust hierarchy to the system prompt
+  1. ToolOutputSanitizer  -- strips injection signals and redacts secrets in tool output
+  2. HierarchyEnforcer    -- prepends explicit trust hierarchy to the system prompt
 
 Usage:
   python run_defended.py
@@ -50,11 +50,26 @@ BASELINE_CSR = {
 
 
 def load_scenarios(path: str = "scenarios/") -> list[dict]:
+    """Load all YAML scenario files, unwrapping the top-level 'scenarios' key."""
     import yaml
     scenarios = []
     for f in sorted(Path(path).glob("*.yaml")):
         with open(f) as fh:
-            scenarios.append(yaml.safe_load(fh))
+            data = yaml.safe_load(fh)
+        # YAML files have top-level 'scenarios:' key containing a list
+        if isinstance(data, dict) and "scenarios" in data:
+            entries = data["scenarios"]
+        elif isinstance(data, list):
+            entries = data
+        else:
+            entries = [data]
+        for entry in entries:
+            # Normalise: add 'prompt' key from first turn if not present
+            if "prompt" not in entry and "turns" in entry:
+                turns = entry["turns"]
+                first = turns[0] if turns else ""
+                entry["prompt"] = first if isinstance(first, str) else first.get("content", "")
+            scenarios.append(entry)
     return scenarios
 
 
@@ -65,17 +80,12 @@ def run_defended(
     judge: ActionJudge,
     defense_mode: str,
 ) -> list[dict]:
-    """
-    Run all scenarios with the specified defense(s) active.
-    defense_mode: 'sanitizer' | 'hierarchy' | 'both'
-    """
     sanitizer = ToolOutputSanitizer() if defense_mode in ("sanitizer", "both") else None
     enforcer = HierarchyEnforcer() if defense_mode in ("hierarchy", "both") else None
 
     results = []
     for scenario in scenarios:
         sid = scenario["id"]
-        prompt = scenario["prompt"]
         threat = scenario["threat_type"]
 
         try:
@@ -85,7 +95,7 @@ def run_defended(
                 sanitizer=sanitizer,
                 hierarchy_enforcer=enforcer,
             )
-            trace = agent.run(prompt)
+            trace = agent.run(scenario)
             verdict = judge.evaluate(sid, trace)
 
             status = "COMP" if verdict["compromised"] else "SAFE"
@@ -126,7 +136,7 @@ def build_comparison_table(
     baseline = BASELINE_CSR.get(model_key, {})
 
     table = Table(
-        title=f"Defense Impact: {model_key} — {defense_mode.upper()} defense",
+        title=f"Defense Impact: {model_key} -- {defense_mode.upper()} defense",
         box=box.HEAVY_EDGE,
         show_lines=True,
     )
@@ -189,7 +199,6 @@ def write_report(
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     stem = f"defended_{model.replace('/', '_')}_{defense_mode}_{ts}"
 
-    # JSON
     json_path = Path(outdir) / f"{stem}.json"
     with open(json_path, "w") as f:
         json.dump({
@@ -201,7 +210,6 @@ def write_report(
             "results": results,
         }, f, indent=2)
 
-    # Markdown
     md_path = Path(outdir) / f"{stem}.md"
     lines = [
         f"# Defended Evaluation: {model}",
@@ -209,8 +217,8 @@ def write_report(
         f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
         "## CSR Summary",
-        f"| | CSR |",
-        f"|---|---|",
+        "| | CSR |",
+        "|---|---|",
         f"| Baseline | {baseline_csr}% |",
         f"| Defended ({defense_mode}) | {defended_csr}% |",
         f"| Reduction | {round(baseline_csr - defended_csr, 1)}pp |",
@@ -232,7 +240,9 @@ def write_report(
             delta = "\u2191 REGRESSED"
         else:
             delta = "\u2014 NO CHANGE"
-        lines.append(f"| {r['id']} | {r['scenario'][:40]} | {r['threat']} | {b_str} | {d_str} | {delta} |")
+        lines.append(
+            f"| {r['id']} | {r['scenario'][:40]} | {r['threat']} | {b_str} | {d_str} | {delta} |"
+        )
 
     with open(md_path, "w") as f:
         f.write("\n".join(lines))
@@ -251,13 +261,11 @@ def main():
     parser.add_argument("--scenarios", default="scenarios/")
     args = parser.parse_args()
 
-    # Parse provider/model
     if "/" in args.model:
         provider, model = args.model.split("/", 1)
     else:
         provider, model = "openai", args.model
 
-    # Baseline CSR from stored results
     model_key = model
     b_results = BASELINE_CSR.get(model_key, {})
     baseline = round(
@@ -268,7 +276,7 @@ def main():
     judge = ActionJudge()
 
     console.print(Panel(
-        f"[bold]{model}[/bold] — defense: [cyan]{args.defense}[/cyan]",
+        f"[bold]{model}[/bold] -- defense: [cyan]{args.defense}[/cyan]",
         title="Running Defended Evaluation",
     ))
 
@@ -286,7 +294,7 @@ def main():
         console.print(f"  CSR reduction: [bold cyan]{reduction}pp[/bold cyan]")
     else:
         console.print(f"  Defended CSR: {d_csr}%")
-        baseline = d_csr  # fallback
+        baseline = d_csr
 
     json_out, md_out = write_report(
         model_key, args.defense, baseline, d_csr, defended
