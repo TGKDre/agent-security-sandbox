@@ -4,7 +4,7 @@ A controlled adversarial evaluation environment for tool-using LLM agents. Tests
 LLMs can be manipulated into leaking secrets, escalating privileges, or acting on injected
 instructions when given access to simulated tools.
 
-Companion project to [llm-redteam-harness](https://github.com/TGKDre/llm-redteam-harness).
+Companion projects: [llm-redteam-harness](https://github.com/TGKDre/llm-redteam-harness) · [autonomous-injection-agent](https://github.com/TGKDre/autonomous-injection-agent)
 
 ---
 
@@ -23,6 +23,11 @@ poisoned document; pattern-based sanitization cannot converge on complete covera
 removing any subset of phrases leaves the others intact. This convergence confirms the
 vulnerability is a class-level architectural gap -- not model-specific -- and establishes
 the capability boundary of pattern-based defense at this scenario tier.
+
+**Follow-on:** The [`autonomous-injection-agent`](https://github.com/TGKDre/autonomous-injection-agent)
+project was built directly from this finding. It is an autonomous LLM red-team agent that
+generates novel payloads beyond the static library, targeting the exact capability boundary
+pi_agent_001 exposed.
 
 ---
 
@@ -190,6 +195,7 @@ layer and the `HierarchyEnforcer` at the instruction layer.
 - [x] Defended evaluation: gpt-4o-mini 75% -> 25% (-50pp)
 - [x] Defended evaluation: claude-haiku-4-5 25% -> 12.5% (-12.5pp)
 - [x] Cross-model defense convergence: both models fail only pi_agent_001
+- [x] **Follow-on: [autonomous-injection-agent](https://github.com/TGKDre/autonomous-injection-agent)** -- autonomous LLM red-team agent targeting the pi_agent_001 capability boundary with novel payload generation
 - [ ] Semantic tool output classifier (LLM-based injection intent detection)
 - [ ] Structural prompt isolation for retrieved content (untrusted-content fencing)
 - [ ] Expanded scenario library (dangerous commands, data poisoning, SSRF)
