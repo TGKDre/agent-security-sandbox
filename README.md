@@ -6,6 +6,8 @@ instructions when given access to simulated tools.
 
 Companion projects: [llm-redteam-harness](https://github.com/TGKDre/llm-redteam-harness) · [autonomous-injection-agent](https://github.com/TGKDre/autonomous-injection-agent)
 
+**Written analysis:** [What Happens When Your Defense Hits a Hard Floor](https://medium.com/@andre.obiuzo/what-happens-when-your-defense-hits-a-hard-floor-08ad2b8fafab) — on prompt injection, converging failures, and what the results mean beyond security.
+
 ---
 
 ## Complete Findings -- Four Evaluation Phases
